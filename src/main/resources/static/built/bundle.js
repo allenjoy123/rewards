@@ -34107,9 +34107,13 @@ var ReactDOM = __webpack_require__(/*! react-dom */ "./node_modules/react-dom/in
 
 
 var client = __webpack_require__(/*! ./client */ "./src/main/js/client.js"); // <3>
-// end::vars[]
-// tag::app[]
 
+
+var follow = __webpack_require__(/*! ./follow */ "./src/main/js/follow.js"); // function to hop multiple links by "rel"
+
+
+var root = '/api'; // end::vars[]
+// tag::app[]
 
 var App = /*#__PURE__*/function (_React$Component) {
   _inherits(App, _React$Component);
@@ -34144,12 +34148,29 @@ var App = /*#__PURE__*/function (_React$Component) {
           customers: response.entity._embedded.customers
         });
       });
-      client({
-        method: 'GET',
-        path: '/api/purchases'
-      }).done(function (response) {
+      follow(client, root, [{
+        rel: 'purchases'
+      }]).then(function (purchaseCollection) {
+        return client({
+          method: 'GET',
+          path: purchaseCollection.entity._links.products.href,
+          headers: {
+            'Accept': 'application/json'
+          }
+        }).then(function (productCollection) {
+          // tag::json-schema-filter[]
+          _this2.links = productCollection.entity._links;
+          purchaseCollection.entity._embedded.purchases.productCollection = productCollection;
+          return purchaseCollection; // end::json-schema-filter[]
+        });
+      }).done(function (purchaseCollection) {
+        debugger;
+
         _this2.setState({
-          purchases: response.entity._embedded.purchases
+          page: _this2.page,
+          purchases: purchaseCollection.entity._embedded.purchases,
+          attributes: Object.keys(_this2.schema.properties),
+          links: _this2.links
         });
       });
     }
@@ -34310,6 +34331,55 @@ module.exports = rest.wrap(mime, {
     'Accept': 'application/hal+json'
   }
 });
+
+/***/ }),
+
+/***/ "./src/main/js/follow.js":
+/*!*******************************!*\
+  !*** ./src/main/js/follow.js ***!
+  \*******************************/
+/*! no static exports found */
+/***/ (function(module, exports) {
+
+module.exports = function follow(api, rootPath, relArray) {
+  var root = api({
+    method: 'GET',
+    path: rootPath
+  });
+  return relArray.reduce(function (root, arrayItem) {
+    var rel = typeof arrayItem === 'string' ? arrayItem : arrayItem.rel;
+    return traverseNext(root, rel, arrayItem);
+  }, root);
+
+  function traverseNext(root, rel, arrayItem) {
+    return root.then(function (response) {
+      if (hasEmbeddedRel(response.entity, rel)) {
+        return response.entity._embedded[rel];
+      }
+
+      if (!response.entity._links) {
+        return [];
+      }
+
+      if (typeof arrayItem === 'string') {
+        return api({
+          method: 'GET',
+          path: response.entity._links[rel].href
+        });
+      } else {
+        return api({
+          method: 'GET',
+          path: response.entity._links[rel].href,
+          params: arrayItem.params
+        });
+      }
+    });
+  }
+
+  function hasEmbeddedRel(entity, rel) {
+    return entity._embedded && entity._embedded.hasOwnProperty(rel);
+  }
+};
 
 /***/ }),
 

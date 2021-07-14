@@ -21,49 +21,26 @@ class App extends React.Component { // <1>
 			this.setState({customers: response.entity._embedded.customers});
 		});
 		follow(client, root, [
-			{rel: 'employees', params: {size: pageSize}}]
-		).then(employeeCollection => {
+			{rel: 'purchases'}]
+		).then(purchaseCollection => {
 			return client({
 				method: 'GET',
-				path: employeeCollection.entity._links.profile.href,
-				headers: {'Accept': 'application/schema+json'}
-			}).then(schema => {
+				path: purchaseCollection.entity._links.products.href,
+				headers: {'Accept': 'application/json'}
+			}).then(productCollection => {
 				// tag::json-schema-filter[]
-				/**
-				 * Filter unneeded JSON Schema properties, like uri references and
-				 * subtypes ($ref).
-				 */
-				Object.keys(schema.entity.properties).forEach(function (property) {
-					if (schema.entity.properties[property].hasOwnProperty('format') &&
-						schema.entity.properties[property].format === 'uri') {
-						delete schema.entity.properties[property];
-					}
-					else if (schema.entity.properties[property].hasOwnProperty('$ref')) {
-						delete schema.entity.properties[property];
-					}
-				});
 
-				this.schema = schema.entity;
-				this.links = employeeCollection.entity._links;
-				return employeeCollection;
+				this.links = productCollection.entity._links;
+				purchaseCollection.entity._embedded.purchases.productCollection = productCollection;
+				return purchaseCollection;
 				// end::json-schema-filter[]
 			});
-		}).then(employeeCollection => {
-			this.page = employeeCollection.entity.page;
-			return employeeCollection.entity._embedded.employees.map(employee =>
-				client({
-					method: 'GET',
-					path: employee._links.self.href
-				})
-			);
-		}).then(employeePromises => {
-			return when.all(employeePromises);
-		}).done(employees => {
+		}).done(purchaseCollection => {
+			debugger;
 			this.setState({
 				page: this.page,
-				employees: employees,
+				purchases: purchaseCollection.entity._embedded.purchases,
 				attributes: Object.keys(this.schema.properties),
-				pageSize: pageSize,
 				links: this.links
 			});
 		});
@@ -87,6 +64,7 @@ class PurchaseList extends React.Component{
 		const purchases = this.props.purchases.map(purchase =>
 			<Purchase key={purchase._links.self.href} purchase={purchase}/>
 		);
+
 		return (
 			<table>
 				<tbody>
